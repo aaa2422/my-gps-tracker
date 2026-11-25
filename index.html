@@ -1,0 +1,386 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My GPS Tracker</title>
+
+<link rel="stylesheet"
+href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: sans-serif;
+  background: #eef2f7;
+  color: #172033;
+}
+
+header {
+  background: #111827;
+  color: white;
+  padding: 15px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+main {
+  padding: 12px;
+}
+
+#map {
+  height: 55vh;
+  min-height: 300px;
+  border-radius: 12px;
+}
+
+.panel {
+  background: white;
+  padding: 15px;
+  margin-top: 12px;
+  border-radius: 12px;
+}
+
+button {
+  padding: 12px;
+  margin: 4px;
+  border: none;
+  border-radius: 8px;
+  background: #2563eb;
+  color: white;
+  font-size: 15px;
+}
+
+button:disabled {
+  opacity: 0.5;
+}
+
+#status {
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+</style>
+</head>
+
+<body>
+
+<header>
+<h1>My GPS Tracker</h1>
+</header>
+
+<main>
+
+<div id="map"></div>
+
+<div class="panel">
+
+<div id="status">GPS待機中</div>
+<div id="coords">現在地：未取得</div>
+<div id="compass">方位：未取得</div>
+<div id="count">記録：0点</div>
+
+<button id="start">GPS記録開始</button>
+<button id="stop" disabled>停止</button>
+<button id="compassButton">コンパス開始</button>
+<button id="export">CSV保存</button>
+<button id="clear">記録消去</button>
+
+</div>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+"use strict";
+
+const status = document.getElementById("status");
+const coords = document.getElementById("coords");
+const compass = document.getElementById("compass");
+const count = document.getElementById("count");
+
+let map = L.map("map").setView([34.6937, 135.5023], 5);
+
+L.tileLayer(
+  "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+  {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap"
+  }
+).addTo(map);
+
+let marker = null;
+let accuracyCircle = null;
+
+let route = L.polyline([], {
+  color: "blue",
+  weight: 4
+}).addTo(map);
+
+let watchId = null;
+
+let locations = [];
+
+try {
+  locations = JSON.parse(
+    localStorage.getItem("gps_locations") || "[]"
+  );
+} catch {
+  locations = [];
+}
+
+function saveLocations() {
+  try {
+    localStorage.setItem(
+      "gps_locations",
+      JSON.stringify(locations)
+    );
+  } catch {
+    status.textContent = "保存できませんでした";
+  }
+
+  count.textContent = "記録：" + locations.length + "点";
+}
+
+function showPosition(position) {
+
+  const latitude = position.coords.latitude;
+  const longitude = position.coords.longitude;
+  const accuracy = position.coords.accuracy;
+
+  const point = [latitude, longitude];
+
+  coords.textContent =
+    "緯度：" + latitude.toFixed(6) +
+    " / 経度：" + longitude.toFixed(6) +
+    " / 精度：" + Math.round(accuracy) + "m";
+
+  status.textContent = "GPS取得中";
+
+  if (marker === null) {
+    marker = L.marker(point)
+      .addTo(map)
+      .bindPopup("現在地");
+  } else {
+    marker.setLatLng(point);
+  }
+
+  if (accuracyCircle === null) {
+    accuracyCircle = L.circle(point, {
+      radius: accuracy,
+      color: "blue",
+      fillOpacity: 0.1
+    }).addTo(map);
+  } else {
+    accuracyCircle.setLatLng(point);
+    accuracyCircle.setRadius(accuracy);
+  }
+
+  route.addLatLng(point);
+
+  map.setView(point, 17);
+
+  locations.push({
+    latitude: latitude,
+    longitude: longitude,
+    accuracy: accuracy,
+    time: new Date().toISOString()
+  });
+
+  saveLocations();
+}
+
+function gpsError(error) {
+  if (error.code === 1) {
+    status.textContent = "位置情報の許可が必要です";
+  } else if (error.code === 2) {
+    status.textContent = "現在地を取得できません";
+  } else if (error.code === 3) {
+    status.textContent = "GPSがタイムアウトしました";
+  } else {
+    status.textContent = "GPSエラー";
+  }
+}
+
+document.getElementById("start").onclick = function() {
+
+  if (!window.isSecureContext) {
+    status.textContent =
+      "GPSにはHTTPS接続が必要です";
+    return;
+  }
+
+  if (!navigator.geolocation) {
+    status.textContent =
+      "このブラウザはGPSに対応していません";
+    return;
+  }
+
+  if (watchId !== null) {
+    return;
+  }
+
+  status.textContent = "GPS開始中";
+
+  document.getElementById("start").disabled = true;
+  document.getElementById("stop").disabled = false;
+
+  watchId = navigator.geolocation.watchPosition(
+    showPosition,
+    gpsError,
+    {
+      enableHighAccuracy: true,
+      maximumAge: 2000,
+      timeout: 25000
+    }
+  );
+};
+
+document.getElementById("stop").onclick = function() {
+
+  if (watchId !== null) {
+    navigator.geolocation.clearWatch(watchId);
+  }
+
+  watchId = null;
+
+  document.getElementById("start").disabled = false;
+  document.getElementById("stop").disabled = true;
+
+  status.textContent = "GPS停止";
+};
+
+document.getElementById("compassButton").onclick =
+async function() {
+
+  try {
+
+    if (
+      typeof DeviceOrientationEvent !== "undefined" &&
+      typeof DeviceOrientationEvent.requestPermission === "function"
+    ) {
+      const permission =
+        await DeviceOrientationEvent.requestPermission();
+
+      if (permission !== "granted") {
+        compass.textContent = "コンパス許可が必要です";
+        return;
+      }
+    }
+
+    window.addEventListener(
+      "deviceorientation",
+      function(event) {
+
+        let direction = null;
+
+        if (typeof event.webkitCompassHeading === "number") {
+          direction = event.webkitCompassHeading;
+        } else if (typeof event.alpha === "number") {
+          direction = 360 - event.alpha;
+        }
+
+        if (direction !== null) {
+          direction = Math.round(
+            (direction + 360) % 360
+          );
+
+          compass.textContent =
+            "方位：" + direction + "°";
+        }
+
+      },
+      true
+    );
+
+    compass.textContent = "コンパス起動中";
+
+  } catch (error) {
+    compass.textContent = "コンパスを利用できません";
+  }
+};
+
+document.getElementById("export").onclick = function() {
+
+  if (locations.length === 0) {
+    alert("記録がありません");
+    return;
+  }
+
+  let csv =
+    "time,latitude,longitude,accuracy_m\n";
+
+  locations.forEach(function(point) {
+    csv +=
+      point.time + "," +
+      point.latitude + "," +
+      point.longitude + "," +
+      point.accuracy + "\n";
+  });
+
+  const blob = new Blob(
+    ["﻿" + csv],
+    { type: "text/csv;charset=utf-8" }
+  );
+
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "gps-track.csv";
+  link.click();
+
+  URL.revokeObjectURL(url);
+};
+
+document.getElementById("clear").onclick = function() {
+
+  if (confirm("GPS記録をすべて消しますか？")) {
+
+    locations = [];
+
+    saveLocations();
+
+    route.setLatLngs([]);
+
+    if (marker !== null) {
+      map.removeLayer(marker);
+      marker = null;
+    }
+
+    if (accuracyCircle !== null) {
+      map.removeLayer(accuracyCircle);
+      accuracyCircle = null;
+    }
+  }
+};
+
+if (locations.length > 0) {
+
+  const savedPoints = locations.map(function(point) {
+    return [point.latitude, point.longitude];
+  });
+
+  route.setLatLngs(savedPoints);
+
+  const last = savedPoints[savedPoints.length - 1];
+
+  marker = L.marker(last).addTo(map);
+
+  map.setView(last, 16);
+}
+
+saveLocations();
+
+</script>
+
+</body>
+</html>
