@@ -68,13 +68,59 @@ button:disabled {
   margin-bottom: 10px;
 }
 
+#loginScreen {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: #111827;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-family: sans-serif;
+}
+
+#passwordInput {
+  padding: 12px;
+  font-size: 18px;
+  border-radius: 8px;
+  border: none;
+  margin: 10px;
+  width: 240px;
+}
+
+#loginButton {
+  padding: 12px 30px;
+  font-size: 16px;
+}
+
+#loginError {
+  color: #f87171;
+}
 </style>
 </head>
 
 <body>
 
+<!-- パスワード画面 -->
+<div id="loginScreen">
+  <h2>My GPS Tracker</h2>
+  <p>パスワードを入力してください</p>
+
+  <input
+    id="passwordInput"
+    type="password"
+    placeholder="パスワード"
+  >
+
+  <button id="loginButton">ログイン</button>
+
+  <p id="loginError"></p>
+</div>
+
 <header>
-<h1>My GPS Tracker</h1>
+  <h1>My GPS Tracker</h1>
 </header>
 
 <main>
@@ -83,16 +129,16 @@ button:disabled {
 
 <div class="panel">
 
-<div id="status">GPS待機中</div>
-<div id="coords">現在地：未取得</div>
-<div id="compass">方位：未取得</div>
-<div id="count">記録：0点</div>
+  <div id="status">GPS待機中</div>
+  <div id="coords">現在地：未取得</div>
+  <div id="compass">方位：未取得</div>
+  <div id="count">記録：0点</div>
 
-<button id="start">GPS記録開始</button>
-<button id="stop" disabled>停止</button>
-<button id="compassButton">コンパス開始</button>
-<button id="export">CSV保存</button>
-<button id="clear">記録消去</button>
+  <button id="start">GPS記録開始</button>
+  <button id="stop" disabled>停止</button>
+  <button id="compassButton">コンパス開始</button>
+  <button id="export">CSV保存</button>
+  <button id="clear">記録消去</button>
 
 </div>
 </main>
@@ -101,6 +147,41 @@ button:disabled {
 
 <script>
 "use strict";
+
+/* =========================
+   パスワード設定
+========================= */
+
+// ★ここを自分のパスワードに変更
+const MY_PASSWORD = "s";
+
+document.getElementById("loginButton").onclick = checkPassword;
+
+document.getElementById("passwordInput").addEventListener(
+  "keydown",
+  function(event) {
+    if (event.key === "Enter") {
+      checkPassword();
+    }
+  }
+);
+
+function checkPassword() {
+  const input =
+    document.getElementById("passwordInput").value;
+
+  if (input === MY_PASSWORD) {
+    document.getElementById("loginScreen").style.display =
+      "none";
+  } else {
+    document.getElementById("loginError").textContent =
+      "パスワードが違います";
+  }
+}
+
+/* =========================
+   GPS Tracker
+========================= */
 
 const status = document.getElementById("status");
 const coords = document.getElementById("coords");
@@ -126,13 +207,16 @@ let route = L.polyline([], {
 }).addTo(map);
 
 let watchId = null;
-
 let locations = [];
 
 try {
   locations = JSON.parse(
     localStorage.getItem("gps_locations") || "[]"
   );
+
+  if (!Array.isArray(locations)) {
+    locations = [];
+  }
 } catch {
   locations = [];
 }
@@ -151,7 +235,6 @@ function saveLocations() {
 }
 
 function showPosition(position) {
-
   const latitude = position.coords.latitude;
   const longitude = position.coords.longitude;
   const accuracy = position.coords.accuracy;
@@ -185,7 +268,6 @@ function showPosition(position) {
   }
 
   route.addLatLng(point);
-
   map.setView(point, 17);
 
   locations.push({
@@ -208,75 +290,17 @@ function gpsError(error) {
   } else {
     status.textContent = "GPSエラー";
   }
+
+  document.getElementById("start").disabled = false;
+  document.getElementById("stop").disabled = true;
+  watchId = null;
 }
 
+/* GPS開始 */
+
 document.getElementById("start").onclick = function() {
-
-<!-- パスワード画面 -->
-<div id="loginScreen" style="
-  position:fixed;
-  inset:0;
-  z-index:99999;
-  background:#111827;
-  color:white;
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-  align-items:center;
-  font-family:sans-serif;
-">
-  <h2>My GPS Tracker</h2>
-  <p>パスワードを入力してください</p>
-
-  <input
-    id="passwordInput"
-    type="password"
-    placeholder="パスワード"
-    style="
-      padding:12px;
-      font-size:18px;
-      border-radius:8px;
-      border:none;
-      margin:10px;
-    "
-  >
-
-  <button
-    onclick="checkPassword()"
-    style="
-      padding:12px 30px;
-      font-size:16px;
-      border-radius:8px;
-      border:none;
-      background:#2563eb;
-      color:white;
-    "
-  >
-    ログイン
-  </button>
-
-  <p id="loginError" style="color:#f87171;"></p>
-</div>
-
-<script>
-  // ★ここを自分のパスワードに変更
-  const MY_PASSWORD = "s";
-
-  function checkPassword() {
-    const input = document.getElementById("passwordInput").value;
-
-    if (input === MY_PASSWORD) {
-      document.getElementById("loginScreen").style.display = "none";
-    } else {
-      document.getElementById("loginError").textContent =
-        "パスワードが違います";
-    }
-  }
-</script>
-
   if (!window.isSecureContext) {
-    status.textContent =
-      "GPSにはHTTPS接続が必要です";
+    status.textContent = "GPSにはHTTPS接続が必要です";
     return;
   }
 
@@ -306,8 +330,9 @@ document.getElementById("start").onclick = function() {
   );
 };
 
-document.getElementById("stop").onclick = function() {
+/* GPS停止 */
 
+document.getElementById("stop").onclick = function() {
   if (watchId !== null) {
     navigator.geolocation.clearWatch(watchId);
   }
@@ -320,11 +345,11 @@ document.getElementById("stop").onclick = function() {
   status.textContent = "GPS停止";
 };
 
+/* コンパス */
+
 document.getElementById("compassButton").onclick =
 async function() {
-
   try {
-
     if (
       typeof DeviceOrientationEvent !== "undefined" &&
       typeof DeviceOrientationEvent.requestPermission === "function"
@@ -341,7 +366,6 @@ async function() {
     window.addEventListener(
       "deviceorientation",
       function(event) {
-
         let direction = null;
 
         if (typeof event.webkitCompassHeading === "number") {
@@ -355,10 +379,8 @@ async function() {
             (direction + 360) % 360
           );
 
-          compass.textContent =
-            "方位：" + direction + "°";
+          compass.textContent = "方位：" + direction + "°";
         }
-
       },
       true
     );
@@ -370,15 +392,15 @@ async function() {
   }
 };
 
-document.getElementById("export").onclick = function() {
+/* CSV保存 */
 
+document.getElementById("export").onclick = function() {
   if (locations.length === 0) {
     alert("記録がありません");
     return;
   }
 
-  let csv =
-    "time,latitude,longitude,accuracy_m\n";
+  let csv = "time,latitude,longitude,accuracy_m\n";
 
   locations.forEach(function(point) {
     csv +=
@@ -389,13 +411,13 @@ document.getElementById("export").onclick = function() {
   });
 
   const blob = new Blob(
-    ["﻿" + csv],
+    ["\uFEFF" + csv],
     { type: "text/csv;charset=utf-8" }
   );
 
   const url = URL.createObjectURL(blob);
-
   const link = document.createElement("a");
+
   link.href = url;
   link.download = "gps-track.csv";
   link.click();
@@ -403,12 +425,11 @@ document.getElementById("export").onclick = function() {
   URL.revokeObjectURL(url);
 };
 
+/* 記録消去 */
+
 document.getElementById("clear").onclick = function() {
-
   if (confirm("GPS記録をすべて消しますか？")) {
-
     locations = [];
-
     saveLocations();
 
     route.setLatLngs([]);
@@ -422,11 +443,15 @@ document.getElementById("clear").onclick = function() {
       map.removeLayer(accuracyCircle);
       accuracyCircle = null;
     }
+
+    coords.textContent = "現在地：未取得";
+    status.textContent = "GPS待機中";
   }
 };
 
-if (locations.length > 0) {
+/* 保存済み記録の表示 */
 
+if (locations.length > 0) {
   const savedPoints = locations.map(function(point) {
     return [point.latitude, point.longitude];
   });
@@ -436,7 +461,6 @@ if (locations.length > 0) {
   const last = savedPoints[savedPoints.length - 1];
 
   marker = L.marker(last).addTo(map);
-
   map.setView(last, 16);
 }
 
